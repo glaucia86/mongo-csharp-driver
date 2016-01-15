@@ -30,7 +30,7 @@ namespace MongoDB.Bson.ObjectModel
             new Decimal128(new uint[] { 0x7E000000, 0, 0, 0 });
 
         private readonly byte _flags;
-        private readonly int _exponent;
+        private readonly short _exponent;
 
         // below only represent the significand
         private readonly uint _high;
@@ -84,7 +84,7 @@ namespace MongoDB.Bson.ObjectModel
                 significandMsb = (parts[0] >> 14) & 0x7;
             }
 
-            _exponent = (int)biasedExponent - __exponentBias;
+            _exponent = (short)(biasedExponent - __exponentBias);
 
             _high = (parts[0] & 0x3FFF) + ((significandMsb & 0xF) << 14);
             _highMid = parts[1];
@@ -109,35 +109,28 @@ namespace MongoDB.Bson.ObjectModel
         public uint[] GetParts()
         {
             var parts = new uint[4];
-            parts[0] = (uint)_flags << 24;
-
-            // combination will be the low 5 bits
-            var combination = (_flags >> 2) & 0x1F;
             uint biasedExponent = (uint)(_exponent + __exponentBias);
-            uint significandMsb;
-            // 2 high combination bits are set
-            if ((combination >> 3) == 0x3)
+
+            parts[3] = _low;
+            parts[2] = _lowMid;
+            parts[1] = _highMid;
+
+            if (((_high >> 17) & 0x1) == 0x1)
             {
-                parts[0] |= (biasedExponent << 15);
-                //biasedExponent = (parts[0] >> 15) & 0x3FFF;
-
-
-
-                significandMsb = 0x8 + ((parts[0] >> 14) & 0x1);
+                parts[0] |= 0x3 << 29;
+                parts[0] |= (biasedExponent & 0x3FFF) << 15;
+                parts[0] |= _high & 0x7FFF;
             }
             else
             {
-                parts[0] |= (biasedExponent << 17);
-                //biasedExponent = (parts[0] >> 17) & 0x3FFF;
-                significandMsb = (parts[0] >> 14) & 0x7;
+                parts[0] |= (biasedExponent & 0x3FFF) << 17;
+                parts[0] |= _high & 0x1FFFFFFF;
             }
 
-            //_high = (parts[0] & 0x3FFF) + ((significandMsb & 0xF) << 14);
-
-            parts[0] |= _high;
-            parts[1] = _highMid;
-            parts[2] = _lowMid;
-            parts[3] = _low;
+            if ((_flags & 0x80) == 0x80)
+            {
+                parts[0] |= 0x80000000;
+            }
 
             return parts;
         }
